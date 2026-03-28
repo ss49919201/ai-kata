@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新聞PDFジェネレーター</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f0e8;
+      color: #222;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.8rem;
+      margin-bottom: 24px;
+      letter-spacing: 0.1em;
+      border-bottom: 3px double #555;
+      padding-bottom: 10px;
+    }
+
+    .container { max-width: 860px; margin: 0 auto; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.1);
+    }
+    .card h2 {
+      font-size: 1rem;
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+      letter-spacing: 0.05em;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 160px;
+    }
+    .form-group label {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      padding: 7px 10px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      width: 100%;
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    /* 記事カード */
+    .article-list { display: flex; flex-direction: column; gap: 14px; }
+    .article-card {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 14px;
+      background: #fafafa;
+      position: relative;
+    }
+    .article-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .article-card-header span { font-size: 0.85rem; font-weight: bold; color: #444; }
+    .btn-remove {
+      background: none;
+      border: 1px solid #e44;
+      color: #e44;
+      border-radius: 3px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .btn-remove:hover { background: #fee; }
+
+    .checkbox-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
+    .checkbox-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 22px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: background 0.2s;
+    }
+    .btn-add {
+      background: #e8e0cc;
+      border: 1px dashed #888;
+      width: 100%;
+      color: #444;
+    }
+    .btn-add:hover { background: #d8d0bc; }
+
+    .btn-generate {
+      background: #222;
+      color: #fff;
+      width: 100%;
+      font-size: 1.1rem;
+      padding: 14px;
+      letter-spacing: 0.1em;
+    }
+    .btn-generate:hover { background: #444; }
+    .btn-generate:disabled { background: #999; cursor: not-allowed; }
+
+    .status {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: #555;
+      min-height: 1.4em;
+    }
+    .status.error { color: #c00; }
+    .status.success { color: #080; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>新聞 PDF ジェネレーター</h1>
+
+  <!-- 新聞基本情報 -->
+  <div class="card">
+    <h2>新聞の基本情報</h2>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>新聞名（題字）</label>
+        <input type="text" id="paper-title" placeholder="○○新聞" value="">
+      </div>
+      <div class="form-group">
+        <label>サブタイトル</label>
+        <input type="text" id="paper-subtitle" placeholder="地域情報紙">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>発行日</label>
+        <input type="text" id="paper-date" placeholder="2026年3月28日">
+      </div>
+      <div class="form-group">
+        <label>号数・版</label>
+        <input type="text" id="paper-edition" placeholder="第123号">
+      </div>
+    </div>
+  </div>
+
+  <!-- 記事リスト -->
+  <div class="card">
+    <h2>記事</h2>
+    <div class="article-list" id="article-list"></div>
+    <button class="btn btn-add" onclick="addArticle()" style="margin-top:12px">＋ 記事を追加</button>
+  </div>
+
+  <!-- 生成ボタン -->
+  <button class="btn btn-generate" id="generate-btn" onclick="generatePdf()">PDF を生成してダウンロード</button>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+let articleCount = 0;
+
+function addArticle(defaults = {}) {
+  articleCount++;
+  const id = `article-${articleCount}`;
+  const idx = articleCount;
+
+  const div = document.createElement('div');
+  div.className = 'article-card';
+  div.id = id;
+  div.innerHTML = `
+    <div class="article-card-header">
+      <span>記事 ${idx}</span>
+      <button class="btn-remove" onclick="removeArticle('${id}')">削除</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 100px">
+        <label>カテゴリ（上見出し）</label>
+        <input type="text" class="field-kicker" placeholder="社会" value="${escAttr(defaults.kicker||'')}">
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>見出し <span style="color:#c00">*</span></label>
+        <input type="text" class="field-headline" placeholder="見出しを入力" value="${escAttr(defaults.headline||'')}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>記者名・クレジット</label>
+        <input type="text" class="field-byline" placeholder="記者 山田太郎" value="${escAttr(defaults.byline||'')}">
+      </div>
+      <div class="form-group">
+        <label>段組み</label>
+        <select class="field-layout">
+          <option value="columns-3" ${(defaults.layout||'columns-3')==='columns-3'?'selected':''}>3段組み</option>
+          <option value="columns-2" ${defaults.layout==='columns-2'?'selected':''}>2段組み</option>
+          <option value="columns-1" ${defaults.layout==='columns-1'?'selected':''}>1段組み（全幅）</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>本文</label>
+      <textarea class="field-body" rows="5" placeholder="記事本文を入力してください...">${escHtml(defaults.body||'')}</textarea>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" class="field-boxed" ${defaults.boxed?'checked':''}> 囲み記事にする</label>
+    </div>
+  `;
+
+  document.getElementById('article-list').appendChild(div);
+}
+
+function removeArticle(id) {
+  document.getElementById(id)?.remove();
+}
+
+function collectData() {
+  const articles = [];
+  document.querySelectorAll('.article-card').forEach((card, i) => {
+    articles.push({
+      kicker:   card.querySelector('.field-kicker').value.trim(),
+      headline: card.querySelector('.field-headline').value.trim(),
+      byline:   card.querySelector('.field-byline').value.trim(),
+      layout:   card.querySelector('.field-layout').value,
+      body:     card.querySelector('.field-body').value.trim(),
+      boxed:    card.querySelector('.field-boxed').checked,
+      isTop:    i === 0,
+    });
+  });
+  return {
+    title:    document.getElementById('paper-title').value.trim() || '新聞',
+    subtitle: document.getElementById('paper-subtitle').value.trim(),
+    date:     document.getElementById('paper-date').value.trim(),
+    edition:  document.getElementById('paper-edition').value.trim(),
+    articles,
+  };
+}
+
+async function generatePdf() {
+  const data = collectData();
+  if (data.articles.length === 0) {
+    setStatus('記事を1件以上追加してください。', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  setStatus('PDF を生成中...', '');
+
+  try {
+    const res = await fetch('/generate-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || 'サーバーエラー');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `newspaper_${new Date().toISOString().slice(0,10)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus('PDF を生成してダウンロードしました。', 'success');
+  } catch (e) {
+    setStatus('エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function escAttr(s) { return s.replace(/"/g, '&quot;'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// デフォルトで1記事追加
+addArticle({ headline: '', body: '' });
+</script>
+</body>
+</html>
